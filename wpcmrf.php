@@ -98,7 +98,7 @@ function wpcmrf_check_for_updates() {
 
   $installed_version = get_option('wpcmrf_version');
   if (is_multisite()) {
-    if ( is_plugin_active_for_network( $plugin_file_path ) ) {
+    if ( is_plugin_active_for_network('connector-civicrm-mcrestface/wpcmrf.php') ) {
       foreach (get_sites(['fields' => 'ids']) as $blog_id) {
         switch_to_blog($blog_id);
         $installed_version = get_option('wpcmrf_version');
