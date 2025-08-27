@@ -124,14 +124,29 @@ function wpcmrf_process_updates($installed_version = null) {
       case '1.0.12':
         // Need to make sure the new `validated` column is added.
         wpcmrf_install_into_current_blog();
-        break;
-      default:
-        // Process an updates prior to v1.0.13 as we now force in an update of the version.
-        // Need to make sure the new `validated` column is added.
-        wpcmrf_install_into_current_blog();
+        // Attempt to revalidate existing profiles.
+        wpcmrf_revalidate_profiles();
         break;
     }
     update_option("wpcmrf_version", $wpcmrf_version, false);
+  }
+}
+
+/**
+ * Loops through all profiles where the `validated` column is false and attempts to revalidate them.
+ * Should only be called when upgrading versions prior to v1.0.13.
+ *
+ * @return void
+ */
+function wpcmrf_revalidate_profiles() {
+  global $wpdb;
+  require_once(WPCMRF_PLUGIN_DIR . '/CMRF/Wordpress/Admin/AdminPage.php');
+
+  $profiles = $wpdb->get_results("SELECT * FROM {$wpdb->get_blog_prefix()}wpcivimrf_profile");
+  foreach($profiles as $profile) {
+    if (empty($profile->validated)) {
+      \CMRF\Wordpress\Admin\AdminPage::validate($profile->id, false);
+    }
   }
 }
 
