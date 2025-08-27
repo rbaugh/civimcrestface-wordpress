@@ -171,6 +171,11 @@ class AdminPage {
       }
     }
 
+    if (empty($error) && empty($profile->validated)) {
+      // We don't have an error, so update the profile to show it is validated.
+      $wpdb->query("UPDATE {$wpdb->get_blog_prefix()}wpcivimrf_profile SET validated = 1 WHERE id = {$profile_id}");
+    }
+
     if ($show_message) {
       return $error ?
         '<div class="notice notice-error">' . __('Validation failed', 'wpcmrf') . ": " . $error . '</div>' :

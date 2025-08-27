@@ -2,7 +2,7 @@
 /**
  * Plugin Name: Connector to CiviCRM with CiviMcRestFace
  * Description: Provides an API connector to a local or remote CiviCRM installation. This connector could be used by other plugins. Funded by Artfulrobot, CiviCoop, civiservice.de, Bundesverband Soziokultur e.V., Article 19
- * Version: 1.0.12
+ * Version: 1.0.13
  * Author: Rich Lott (Artfulrobot), Jaap Jansma (CiviCooP)
  * Plugin URI: https://github.com/CiviMRF/civimcrestface-wordpress
  * Text Domain: wpcmrf
@@ -26,8 +26,13 @@
 // All functions are Wordpress-specific.
 defined('ABSPATH') or die('No script kiddies please!');
 
-$wpcmrf_version = '1.0.12';
+$wpcmrf_version = '1.0.13';
 define('WPCMRF_PLUGIN_DIR', plugin_dir_path(__FILE__));
+
+/**
+ * Get parameter for upgrade error code
+ */
+define('GET_WPCMRF_ERROR_PARAM', 'wpcmrf-error');
 
 require_once(WPCMRF_PLUGIN_DIR . '/vendor/autoload.php');
 // @todo autoloader for this.
@@ -87,6 +92,64 @@ function wpcmrf_install( $network_wide ) {
   }
 }
 
+function wpcmrf_check_for_updates() {
+  global $wpdb;
+  global $wpcmrf_version;
+
+  $installed_version = get_option('wpcmrf_version');
+  if (is_multisite()) {
+    if ( is_plugin_active_for_network('connector-civicrm-mcrestface/wpcmrf.php') ) {
+      foreach (get_sites(['fields' => 'ids']) as $blog_id) {
+        switch_to_blog($blog_id);
+        $installed_version = get_option('wpcmrf_version');
+        wpcmrf_process_updates($installed_version);
+        restore_current_blog();
+      }
+    }
+    else {
+      wpcmrf_process_updates($installed_version);
+    }
+  }
+  else {
+    wpcmrf_process_updates($installed_version);
+  }
+}
+add_action('plugins_loaded', 'wpcmrf_check_for_updates');
+
+function wpcmrf_process_updates($installed_version = null) {
+  global $wpcmrf_version;
+
+  if (empty($installed_version) || ($installed_version < $wpcmrf_version)) {
+    switch ($installed_version) {
+      case '1.0.12':
+        // Need to make sure the new `validated` column is added.
+        wpcmrf_install_into_current_blog();
+        // Attempt to revalidate existing profiles.
+        wpcmrf_revalidate_profiles();
+        break;
+    }
+    update_option("wpcmrf_version", $wpcmrf_version, false);
+  }
+}
+
+/**
+ * Loops through all profiles where the `validated` column is false and attempts to revalidate them.
+ * Should only be called when upgrading versions prior to v1.0.13.
+ *
+ * @return void
+ */
+function wpcmrf_revalidate_profiles() {
+  global $wpdb;
+  require_once(WPCMRF_PLUGIN_DIR . '/CMRF/Wordpress/Admin/AdminPage.php');
+
+  $profiles = $wpdb->get_results("SELECT * FROM {$wpdb->get_blog_prefix()}wpcivimrf_profile");
+  foreach($profiles as $profile) {
+    if (empty($profile->validated)) {
+      \CMRF\Wordpress\Admin\AdminPage::validate($profile->id, false);
+    }
+  }
+}
+
 function wpcmrf_install_into_current_blog() {
   global $wpdb;
   global $wpcmrf_version;
@@ -102,6 +165,7 @@ function wpcmrf_install_into_current_blog() {
       urlV4 varchar(255) DEFAULT '' NOT NULL,
       site_key varchar(255) DEFAULT '' NOT NULL,
       api_key varchar(255) DEFAULT '' NOT NULL,
+      validated bit DEFAULT 0 NOT NULL,
   PRIMARY KEY  (id)
   ) ENGINE = InnoDB $charset_collate;";
 
@@ -129,7 +193,7 @@ function wpcmrf_install_into_current_blog() {
 
   dbDelta($sql);
 
-  add_option("wpcmrf_version", $wpcmrf_version);
+  add_option("wpcmrf_version", $wpcmrf_version, false);
 }
 
 register_activation_hook(__FILE__, 'wpcmrf_install');
